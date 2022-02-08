@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: php-dev
+      args:
+        BUILD_VERSION: dev
+    environment:
+      PHP_FPM_WORKERS: ${PHP_FPM_WORKERS:-5}
+      XDEBUG_CLIENT_HOST: ${XDEBUG_CLIENT_HOST:-host.docker.internal}
+    volumes:
+      - .:/app
+      - ./docker/.cache/composer:/var/www/.composer
+      - ./docker/.cache/psalm:/var/www/.cache
+    user: ${UID:-1000}:${GID:-1000}
+    depends_on:
+      - mysql
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+      target: nginx-dev
+    volumes:
+      - ./public:/app/public
+    ports:
+      - 6980:80
+    environment:
+      NGINX_ENTRYPOINT_QUIET_LOGS: ${NGINX_ENTRYPOINT_QUIET_LOGS:-1}
+      PHP_FPM_URL: php:9000
+    depends_on:
+      - php
