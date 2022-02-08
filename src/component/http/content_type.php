@@ -7,7 +7,6 @@
  * file that was distributed with this source code.
  */
 
-
 namespace async2\component\http;
 
 use async2\util\xstring;

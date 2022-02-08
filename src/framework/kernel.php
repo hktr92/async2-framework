@@ -11,6 +11,7 @@ namespace async2\framework;
 
 use async2\component\event\event_bus;
 use async2\component\file\file;
+use async2\component\http\context;
 use async2\component\http\request;
 use async2\component\http\response\response;
 use async2\component\http\response\status_code;
@@ -20,6 +21,8 @@ use async2\component\router\router;
 use async2\component\router\router_event;
 use async2\framework\event\exception_event;
 use Throwable;
+
+use function sprintf;
 
 /**
  * @package async2
@@ -61,34 +64,46 @@ final class kernel
      */
     public function handle(request $request): void
     {
+        $context = new context(
+            request: $request,
+        );
+
         try {
             $this->load_routes("$this->config_dir/routes.php");
 
             $this->router->on(
                 router_event::matched,
-                fn(route_match_event $event) => $event
-                    ->response
-                    ->with_content_type(
-                        $event->request->content_type(),
-                    ),
+                function (route_match_event $event) {
+                    $event
+                        ->context
+                        ->response
+                        ->with_content_type(
+                            $event
+                                ->context
+                                ->request
+                                ->content_type(),
+                        );
+
+                    return $event;
+                },
             );
 
-            $this->router->handle($request);
+            $this->router->handle($context)->send();
         } catch (Throwable $t) {
+            $context->response = new response(
+                status: status_code::internal_server_error,
+                body: "Whoops! Something went wrong.",
+            );
+
+            $context->throwable = $t;
+
             /** @psalm-var exception_event $event */
             $event = $this->event_bus->emit(
                 name: kernel_event::exception->value,
-                event: new exception_event(
-                    throwable: $t,
-                    request: $request,
-                    response: new response(
-                        status: status_code::internal_server_error,
-                        body: "Whoops! Something went wrong.",
-                    ),
-                ),
+                event: new exception_event(context: $context),
             );
 
-            $event->response->send();
+            $event->context->response->send();
         }
     }
 
@@ -114,12 +129,19 @@ final class kernel
         $this->on(
             name: kernel_event::exception,
             listener: function (exception_event $event) {
-                if ($event->throwable instanceof not_found_http_exception) {
+                if ($event->context->throwable instanceof not_found_http_exception) {
                     $message = "route %s '%s' was not found on this server.";
 
                     $event
+                        ->context
                         ->response
-                        ->with_body($message)
+                        ->with_body(
+                            sprintf(
+                                $message,
+                                $event->context->request->url->method,
+                                $event->context->request->url->uri->to_str(),
+                            ),
+                        )
                         ->with_status_code(status_code::not_found);
                 }
 

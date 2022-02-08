@@ -7,20 +7,22 @@
  * file that was distributed with this source code.
  */
 
-namespace async2\framework\event;
+namespace async2\component\http;
 
-use async2\component\event\event;
-use async2\component\http\context;
+use async2\component\http\response\response;
+use Throwable;
 
 /**
  * @package async2
  *
- * event emitted by framework when an exception occurred during the current request.
+ * class that provides a simple context for any route.
  */
-class exception_event extends event
+final class context
 {
     public function __construct(
-        public readonly context $context,
+        public readonly request $request,
+        public response $response = new response(),
+        public ?Throwable $throwable = null,
     ) {
     }
 }

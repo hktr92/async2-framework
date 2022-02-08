@@ -10,8 +10,7 @@
 namespace async2\component\router;
 
 use async2\component\event\event;
-use async2\component\http\request;
-use async2\component\http\response\response;
+use async2\component\http\context;
 
 /**
  * @package async2
@@ -21,8 +20,7 @@ use async2\component\http\response\response;
 final class route_match_event extends event
 {
     public function __construct(
-        public readonly request $request,
-        public readonly response $response,
+        public readonly context $context,
     ) {
     }
 }

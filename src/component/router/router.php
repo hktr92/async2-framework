@@ -20,7 +20,9 @@ use async2\component\http;
  * current downside:
  * - only one handler / path / method is allowed.
  *
- * @psalm-type _routes_definition array<"get"|"post"|"put"|"delete", array<string, callable>>
+ * @psalm-type _http_methods "get"|"post"|"put"|"delete"
+ * @psalm-type _route_def array<string, callable(http\context):http\response\response>
+ * @psalm-type _routes_definition array<_http_methods, _route_def>
  */
 final class router
 {
@@ -53,10 +55,7 @@ final class router
      */
     public function use(http\method $method, string $path, callable $callback): self
     {
-        if (!isset($this->routes[$method->value])) {
-            $this->routes[$method->value] = [];
-        }
-
+        /** @psalm-var callable(http\context):http\response\response $callback */
         if (isset($this->routes[$method->value][$path])) {
             throw router_exception::route_already_defined($method, $path);
         }
@@ -77,8 +76,10 @@ final class router
     /**
      * performs route matching, then emits an router_event::matched event with the result.
      */
-    public function handle(http\request $request): void
+    public function handle(http\context $context): http\response\response
     {
+        $request = $context->request;
+
         foreach ($this->routes as $method => $paths) {
             if ($method !== $request->url->method) {
                 continue;
@@ -89,19 +90,23 @@ final class router
                     continue;
                 }
 
-                $response = $callback($request);
+                $response = $callback($context);
 
                 if (false === ($response instanceof http\response\response)) {
                     throw router_exception::invalid_route_callback_result();
                 }
 
-                $this->event_bus->emit(
+                $context->response = $response;
+
+                /** @psalm-var route_match_event $event */
+                $event = $this->event_bus->emit(
                     name: router_event::matched->value,
                     event: new route_match_event(
-                        request: $request,
-                        response: $response,
+                        context: $context,
                     ),
                 );
+
+                return $event->context->response;
             }
         }
 

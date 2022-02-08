@@ -71,6 +71,7 @@ class response
     public function send(): void
     {
         http_response_code($this->status->value);
+
         // TODO -- implement headers, just like in request::$headers
         header("Content-Type: {$this->content_type->value}");
 
