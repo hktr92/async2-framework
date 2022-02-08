@@ -86,3 +86,5 @@ reports/*
 
 docker/.cache/*
 !docker/.cache/**/.gitkeep
+
+.php-cs-fixer.cache
