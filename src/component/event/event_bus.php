@@ -9,6 +9,13 @@
 
 namespace async2\component\event;
 
+use ReflectionAttribute;
+use ReflectionClass;
+use ReflectionMethod;
+
+use function count;
+use function is_string;
+
 /**
  * @package async2
  *
@@ -62,9 +69,66 @@ final class event_bus
                 break;
             }
 
-            $event = $handler['listener']($event);
+            $returned_event = $handler['listener']($event);
+            if ($returned_event instanceof event) {
+                $event = $returned_event;
+            }
         }
 
         return $event;
+    }
+
+    /**
+     * auto-registers the handlers, if any
+     */
+    public function discover(object $object): void
+    {
+        // TODO -- use local event bus
+//        if (false === property_exists($object, 'event_bus')) {
+//            return;
+//        }
+
+        $reflection = new ReflectionClass($object);
+
+        // 1. get class attributes
+        if ($reflection->hasMethod('__invoke')) {
+            $class_attributes = $reflection->getAttributes(on::class);
+            foreach ($class_attributes as $attribute) {
+                $this->register_from_attribute(
+                    attribute: $attribute,
+                    callback: $reflection->newInstance()->__invoke(...),
+                );
+            }
+        }
+
+        // 2. get public methods attributes
+        foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            $method_attributes = $method->getAttributes(on::class);
+
+            if (count($method_attributes) === 0) {
+                continue;
+            }
+
+            foreach ($method_attributes as $attribute) {
+                $this->register_from_attribute(
+                    attribute: $attribute,
+                    callback: $method->getClosure($object)
+                );
+            }
+        }
+    }
+
+    private function register_from_attribute(ReflectionAttribute $attribute, callable $callback): void
+    {
+        /** @psalm-var on $on_config */
+        $on_config = $attribute->newInstance();
+
+        $name = !is_string($on_config->name) ? $on_config->name->value : $on_config->name;
+
+        $this->on(
+            name: $name,
+            listener: $callback,
+            priority: $on_config->priority,
+        );
     }
 }

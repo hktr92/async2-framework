@@ -15,14 +15,11 @@ use async2\component\http\context;
 use async2\component\http\request;
 use async2\component\http\response\response;
 use async2\component\http\response\status_code;
-use async2\component\router\not_found_http_exception;
 use async2\component\router\route_match_event;
 use async2\component\router\router;
-use async2\component\router\router_event;
 use async2\framework\event\exception_event;
+use async2\framework\event_handler\route_not_found_handler;
 use Throwable;
-
-use function sprintf;
 
 /**
  * @package async2
@@ -32,7 +29,7 @@ use function sprintf;
  */
 final class kernel
 {
-    private event_bus $event_bus;
+    public readonly event_bus $event_bus;
     private router $router;
 
     public function __construct(
@@ -41,7 +38,7 @@ final class kernel
         $this->event_bus = new event_bus();
         $this->router = new router();
 
-        $this->init_default_error_handler();
+        $this->event_bus->discover(new route_not_found_handler());
     }
 
     /**
@@ -64,31 +61,14 @@ final class kernel
      */
     public function handle(request $request): void
     {
-        $context = new context(
-            request: $request,
-        );
+        $context = new context(request: $request);
+
+        $this->event_bus->discover(new route_match_event($context));
 
         try {
             $this->load_routes("$this->config_dir/routes.php");
 
-            $this->router->on(
-                router_event::matched,
-                function (route_match_event $event) {
-                    $event
-                        ->context
-                        ->response
-                        ->with_content_type(
-                            $event
-                                ->context
-                                ->request
-                                ->content_type(),
-                        );
-
-                    return $event;
-                },
-            );
-
-            $this->router->handle($context)->send();
+            $this->router->handle(context: $context)->send();
         } catch (Throwable $t) {
             $context->response = new response(
                 status: status_code::internal_server_error,
@@ -119,35 +99,5 @@ final class kernel
         /** @psalm-suppress UnresolvableInclude */
         // TODO(psalm-fix)
         (require_once $routes_config)($this->router);
-    }
-
-    /**
-     * a default error handler that checks whether the caught exception is 404 or else.
-     */
-    private function init_default_error_handler(): void
-    {
-        $this->on(
-            name: kernel_event::exception,
-            listener: function (exception_event $event) {
-                if ($event->context->throwable instanceof not_found_http_exception) {
-                    $message = "route %s '%s' was not found on this server.";
-
-                    $event
-                        ->context
-                        ->response
-                        ->with_body(
-                            sprintf(
-                                $message,
-                                $event->context->request->url->method,
-                                $event->context->request->url->uri->to_str(),
-                            ),
-                        )
-                        ->with_status_code(status_code::not_found);
-                }
-
-                return $event;
-            },
-            priority: -100,
-        );
     }
 }
