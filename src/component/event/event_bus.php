@@ -9,11 +9,9 @@
 
 namespace async2\component\event;
 
+use async2\util\attribute;
 use ReflectionAttribute;
-use ReflectionClass;
-use ReflectionMethod;
 
-use function count;
 use function is_string;
 
 /**
@@ -69,6 +67,7 @@ final class event_bus
                 break;
             }
 
+            /** @psalm-var mixed $returned_event */
             $returned_event = $handler['listener']($event);
             if ($returned_event instanceof event) {
                 $event = $returned_event;
@@ -83,38 +82,11 @@ final class event_bus
      */
     public function discover(object $object): void
     {
-        // TODO -- use local event bus
-//        if (false === property_exists($object, 'event_bus')) {
-//            return;
-//        }
-
-        $reflection = new ReflectionClass($object);
-
-        // 1. get class attributes
-        if ($reflection->hasMethod('__invoke')) {
-            $class_attributes = $reflection->getAttributes(on::class);
-            foreach ($class_attributes as $attribute) {
-                $this->register_from_attribute(
-                    attribute: $attribute,
-                    callback: $reflection->newInstance()->__invoke(...),
-                );
-            }
-        }
-
-        // 2. get public methods attributes
-        foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-            $method_attributes = $method->getAttributes(on::class);
-
-            if (count($method_attributes) === 0) {
-                continue;
-            }
-
-            foreach ($method_attributes as $attribute) {
-                $this->register_from_attribute(
-                    attribute: $attribute,
-                    callback: $method->getClosure($object)
-                );
-            }
+        foreach (attribute::get($object) as $attribute_data) {
+            $this->register_from_attribute(
+                attribute: $attribute_data['attribute'],
+                callback: $attribute_data['callback'],
+            );
         }
     }
 
@@ -123,6 +95,7 @@ final class event_bus
         /** @psalm-var on $on_config */
         $on_config = $attribute->newInstance();
 
+        /** @psalm-var string $name */
         $name = !is_string($on_config->name) ? $on_config->name->value : $on_config->name;
 
         $this->on(

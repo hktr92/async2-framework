@@ -15,7 +15,7 @@ use Attribute;
 final class on
 {
     public function __construct(
-        public readonly mixed $name,
+        public readonly string|object $name,
         public readonly int $priority = 10,
     ) {
     }
